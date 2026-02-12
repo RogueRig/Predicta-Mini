@@ -1,9 +1,15 @@
-"""Wallet management API endpoints - Safe deployment and token approvals."""
+"""Wallet management API endpoints - Safe deployment and token approvals.
+
+The Polymarket relayer derives the Safe address from the signer's private key.
+All operations use the server-side private key from config, which acts on
+behalf of users. In production, each user would have their own key via Privy.
+"""
 
 from flask import Blueprint, request, jsonify
 from polymarket.relayer import (
     deploy_safe_wallet,
     get_safe_address,
+    is_safe_deployed,
     approve_all_tokens,
     get_transaction_status,
 )
@@ -13,18 +19,22 @@ wallet_bp = Blueprint("wallet", __name__, url_prefix="/api/wallet")
 
 @wallet_bp.route("/safe/address", methods=["POST"])
 def predict_safe_address():
-    """Get the predicted Safe address for a user's EOA.
+    """Get the predicted Safe address for the configured signer.
 
-    Body:
-        owner_address: The user's EOA wallet address from Privy.
+    The Safe address is deterministically derived from the private key.
+    Optionally accepts a private_key in the body; defaults to server key.
     """
     try:
-        data = request.get_json()
-        if not data or "owner_address" not in data:
-            return jsonify({"error": "owner_address required"}), 400
+        data = request.get_json() or {}
+        private_key = data.get("private_key")
 
-        result = get_safe_address(data["owner_address"])
-        return jsonify(result)
+        safe_address = get_safe_address(private_key)
+        deployed = is_safe_deployed(private_key)
+
+        return jsonify({
+            "address": safe_address,
+            "deployed": deployed,
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -32,19 +42,16 @@ def predict_safe_address():
 
 @wallet_bp.route("/safe/deploy", methods=["POST"])
 def deploy_wallet():
-    """Deploy a Safe wallet for the user via the Polymarket relayer.
+    """Deploy a Safe wallet via the Polymarket relayer (gasless).
 
-    This is gasless - Polymarket pays the gas fees.
-
-    Body:
-        owner_address: The user's EOA wallet address from Privy.
+    Polymarket pays all gas fees. The Safe address is derived from
+    the signer's private key.
     """
     try:
-        data = request.get_json()
-        if not data or "owner_address" not in data:
-            return jsonify({"error": "owner_address required"}), 400
+        data = request.get_json() or {}
+        private_key = data.get("private_key")
 
-        result = deploy_safe_wallet(data["owner_address"])
+        result = deploy_safe_wallet(private_key)
         return jsonify({"success": True, "deployment": result})
 
     except Exception as e:
@@ -53,20 +60,16 @@ def deploy_wallet():
 
 @wallet_bp.route("/safe/approve", methods=["POST"])
 def approve_tokens():
-    """Approve all required tokens for trading.
+    """Approve all required tokens for trading (gasless).
 
-    Approves USDC.e and CTF tokens for all exchange contracts.
-    Must be called once before the user can trade.
-
-    Body:
-        safe_address: The user's deployed Safe wallet address.
+    Approves USDC.e and CTF tokens for all exchange contracts
+    in a single batch transaction. Must be called once before trading.
     """
     try:
-        data = request.get_json()
-        if not data or "safe_address" not in data:
-            return jsonify({"error": "safe_address required"}), 400
+        data = request.get_json() or {}
+        private_key = data.get("private_key")
 
-        result = approve_all_tokens(data["safe_address"])
+        result = approve_all_tokens(private_key)
         return jsonify({"success": True, "approval": result})
 
     except Exception as e:

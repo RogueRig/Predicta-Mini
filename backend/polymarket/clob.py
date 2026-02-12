@@ -1,4 +1,9 @@
-"""CLOB client wrapper for Polymarket trading operations."""
+"""CLOB client wrapper for Polymarket trading operations.
+
+Uses BuilderConfig for automatic order attribution to the builder account.
+All orders placed through this client are attributed to builder key
+019b99f0-0f93-7753-8dc3-d913cf44dcd4 on the Polymarket Builder Leaderboard.
+"""
 
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import (
@@ -7,27 +12,45 @@ from py_clob_client.clob_types import (
     OrderType,
     BookParams,
 )
+from py_builder_signing_sdk.config import BuilderConfig
+from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
 from config import Config
 
 
+def _get_builder_config():
+    """Create BuilderConfig for order attribution."""
+    if not Config.POLY_BUILDER_API_KEY:
+        return None
+    creds = BuilderApiKeyCreds(
+        key=Config.POLY_BUILDER_API_KEY,
+        secret=Config.POLY_BUILDER_SECRET,
+        passphrase=Config.POLY_BUILDER_PASSPHRASE,
+    )
+    return BuilderConfig(local_builder_creds=creds)
+
+
 def create_clob_client(private_key=None, funder=None, signature_type=0):
-    """Create an authenticated CLOB client for trading.
+    """Create a CLOB client for trading with builder attribution.
 
     Args:
         private_key: User's private key for signing orders.
-        funder: The funder address (proxy/safe wallet address).
+                     Falls back to server-side key from config.
+        funder: The funder address (Safe wallet address).
         signature_type: 0=EOA, 1=Magic/email, 2=browser proxy.
     """
-    if not private_key:
+    pk = private_key or Config.PRIVATE_KEY
+
+    if not pk:
         # Read-only client for market data
         return ClobClient(Config.CLOB_API_URL)
 
     client = ClobClient(
         Config.CLOB_API_URL,
-        key=private_key,
+        key=pk,
         chain_id=Config.CHAIN_ID,
         signature_type=signature_type,
         funder=funder,
+        builder_config=_get_builder_config(),
     )
     client.set_api_creds(client.create_or_derive_api_creds())
     return client
@@ -70,8 +93,7 @@ def create_limit_order(client, token_id, price, size, side="BUY"):
         side=side,
         token_id=token_id,
     )
-    signed_order = client.create_order(order_args)
-    return signed_order
+    return client.create_order(order_args)
 
 
 def create_market_order(client, token_id, amount, side="BUY"):
@@ -87,12 +109,15 @@ def create_market_order(client, token_id, amount, side="BUY"):
         token_id=token_id,
         amount=amount,
     )
-    signed_order = client.create_market_order(order_args)
-    return signed_order
+    return client.create_market_order(order_args)
 
 
 def post_order(client, signed_order, order_type=OrderType.GTC):
-    """Submit a signed order to the CLOB."""
+    """Submit a signed order to the CLOB.
+
+    Builder attribution headers are automatically attached by the
+    ClobClient when builder_config is set.
+    """
     return client.post_order(signed_order, order_type)
 
 

@@ -1,5 +1,6 @@
 """Market discovery and filtering via Polymarket Gamma API."""
 
+import json
 import requests
 from config import Config
 
@@ -21,14 +22,28 @@ def get_crypto_events(
     min_liquidity=0,
 ):
     """Fetch crypto-related prediction market events from Gamma API."""
+    # Gamma API: 'order' is a field name, 'ascending' controls direction
+    order_field_map = {
+        "volume": "volume",
+        "liquidity": "liquidity",
+        "newest": "createdAt",
+        "ending_soon": "endDate",
+    }
+    ascending_map = {
+        "volume": "false",
+        "liquidity": "false",
+        "newest": "false",
+        "ending_soon": "true",
+    }
+
     params = {
         "limit": limit,
         "offset": offset,
         "active": str(active).lower(),
         "closed": str(closed).lower(),
-        "order": order,
-        "ascending": "true" if order == "asc" else "false",
-        "tag": "crypto",
+        "tag_slug": "crypto",
+        "order": order_field_map.get(sort_by, "volume"),
+        "ascending": ascending_map.get(sort_by, "false"),
     }
 
     if search:
@@ -38,7 +53,7 @@ def get_crypto_events(
     resp.raise_for_status()
     events = resp.json()
 
-    # Additional client-side filtering
+    # Client-side filtering for volume/liquidity thresholds
     filtered = []
     for event in events:
         markets = event.get("markets", [])
@@ -51,15 +66,6 @@ def get_crypto_events(
             continue
 
         filtered.append(_format_event(event, total_volume, total_liquidity))
-
-    if sort_by == "volume":
-        filtered.sort(key=lambda e: e["total_volume"], reverse=(order == "desc"))
-    elif sort_by == "liquidity":
-        filtered.sort(key=lambda e: e["total_liquidity"], reverse=(order == "desc"))
-    elif sort_by == "newest":
-        filtered.sort(key=lambda e: e["created_at"], reverse=True)
-    elif sort_by == "ending_soon":
-        filtered.sort(key=lambda e: e["end_date"] or "9999", reverse=False)
 
     return filtered
 
@@ -94,13 +100,21 @@ def get_market_detail(condition_id):
 
 
 def search_crypto_markets(query, limit=20):
-    """Search crypto markets by keyword."""
+    """Search crypto markets by keyword.
+
+    The Gamma API text search is unreliable, so we fetch a larger batch
+    of crypto events and filter client-side by title/description match.
+    """
+    query_lower = query.lower()
+
+    # Fetch a larger batch to filter from
     params = {
-        "limit": limit,
+        "limit": 100,
         "active": "true",
         "closed": "false",
-        "tag": "crypto",
-        "title": query,
+        "tag_slug": "crypto",
+        "order": "volume",
+        "ascending": "false",
     }
     resp = requests.get(f"{GAMMA_URL}/events", params=params, timeout=15)
     resp.raise_for_status()
@@ -108,10 +122,24 @@ def search_crypto_markets(query, limit=20):
 
     results = []
     for event in events:
-        markets = event.get("markets", [])
-        total_volume = sum(float(m.get("volume", 0) or 0) for m in markets)
-        total_liquidity = sum(float(m.get("liquidity", 0) or 0) for m in markets)
-        results.append(_format_event(event, total_volume, total_liquidity))
+        title = (event.get("title") or "").lower()
+        desc = (event.get("description") or "").lower()
+        # Also check individual market questions
+        market_match = any(
+            query_lower in (m.get("question") or "").lower()
+            for m in event.get("markets", [])
+        )
+
+        if query_lower in title or query_lower in desc or market_match:
+            markets = event.get("markets", [])
+            total_volume = sum(float(m.get("volume", 0) or 0) for m in markets)
+            total_liquidity = sum(
+                float(m.get("liquidity", 0) or 0) for m in markets
+            )
+            results.append(_format_event(event, total_volume, total_liquidity))
+
+        if len(results) >= limit:
+            break
 
     return results
 
@@ -127,9 +155,34 @@ def get_orderbook(token_id):
     return resp.json()
 
 
+def _parse_json_field(value, default=None):
+    """Parse a JSON-encoded string field from the Gamma API."""
+    if default is None:
+        default = []
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return default
+    if isinstance(value, list):
+        return value
+    return default
+
+
 def _format_event(event, total_volume, total_liquidity):
     """Format an event for the frontend."""
     markets = event.get("markets", [])
+    summaries = []
+    for m in markets[:5]:
+        prices = _parse_json_field(m.get("outcomePrices"), ["0.5", "0.5"])
+        summaries.append({
+            "id": m.get("id"),
+            "question": m.get("question", ""),
+            "outcome_yes": prices[0] if prices else "0.5",
+            "outcome_no": prices[1] if len(prices) > 1 else "0.5",
+            "volume": float(m.get("volume", 0) or 0),
+        })
+
     return {
         "id": event.get("id"),
         "title": event.get("title", ""),
@@ -145,27 +198,16 @@ def _format_event(event, total_volume, total_liquidity):
         "total_volume": total_volume,
         "total_liquidity": total_liquidity,
         "market_count": len(markets),
-        "markets_summary": [
-            {
-                "id": m.get("id"),
-                "question": m.get("question", ""),
-                "outcome_yes": m.get("outcomePrices", ["0.5", "0.5"])[0]
-                if m.get("outcomePrices")
-                else "0.5",
-                "outcome_no": m.get("outcomePrices", ["0.5", "0.5"])[1]
-                if m.get("outcomePrices") and len(m.get("outcomePrices", [])) > 1
-                else "0.5",
-                "volume": float(m.get("volume", 0) or 0),
-            }
-            for m in markets[:5]
-        ],
+        "markets_summary": summaries,
     }
 
 
 def _format_market(market):
     """Format a market for the frontend."""
-    outcome_prices = market.get("outcomePrices", ["0.5", "0.5"])
-    tokens = market.get("clobTokenIds", ["", ""])
+    outcome_prices = _parse_json_field(
+        market.get("outcomePrices"), ["0.5", "0.5"]
+    )
+    tokens = _parse_json_field(market.get("clobTokenIds"), ["", ""])
 
     return {
         "id": market.get("id"),

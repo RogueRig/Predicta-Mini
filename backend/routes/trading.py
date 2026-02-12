@@ -15,7 +15,7 @@ from polymarket.clob import (
     get_last_trade_price,
     get_midpoint,
 )
-from polymarket.attribution import get_builder_auth_headers, get_builder_key_id
+from polymarket.attribution import get_builder_key_id
 
 trading_bp = Blueprint("trading", __name__, url_prefix="/api/trading")
 
