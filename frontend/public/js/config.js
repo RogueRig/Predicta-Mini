@@ -6,7 +6,7 @@ const APP_CONFIG = {
     API_BASE: window.location.origin + '/api',
 
     // Privy App ID (set via Firebase environment or directly)
-    PRIVY_APP_ID: 'YOUR_PRIVY_APP_ID',
+    PRIVY_APP_ID: 'cmkhyc6vd026fjv0d5q4xmkqm',
 
     // Polymarket chain
     CHAIN_ID: 137, // Polygon mainnet
