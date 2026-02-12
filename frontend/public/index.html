@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predicta Mini - Crypto Prediction Markets</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">◈</span>
+                    <span class="logo-text">Predicta Mini</span>
+                </div>
+                <nav class="nav">
+                    <button class="nav-btn active" data-view="markets">Markets</button>
+                    <button class="nav-btn" data-view="portfolio">Portfolio</button>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div id="wallet-section">
+                    <button id="connect-wallet-btn" class="btn btn-primary">Connect Wallet</button>
+                    <div id="wallet-info" class="wallet-info hidden">
+                        <span id="wallet-address" class="wallet-address"></span>
+                        <span id="wallet-balance" class="wallet-balance"></span>
+                        <button id="disconnect-btn" class="btn btn-ghost btn-sm">Disconnect</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Markets View -->
+            <div id="markets-view" class="view active">
+                <!-- Search and Filters -->
+                <div class="filters-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                        </svg>
+                        <input type="text" id="search-input" placeholder="Search crypto markets..." class="search-input">
+                    </div>
+                    <div class="filter-controls">
+                        <select id="sort-select" class="filter-select">
+                            <option value="volume">Volume (High to Low)</option>
+                            <option value="liquidity">Liquidity (High to Low)</option>
+                            <option value="newest">Newest First</option>
+                            <option value="ending_soon">Ending Soon</option>
+                        </select>
+                        <div class="filter-group">
+                            <label class="filter-label">Min Volume</label>
+                            <select id="min-volume-select" class="filter-select">
+                                <option value="0">Any</option>
+                                <option value="1000">$1K+</option>
+                                <option value="10000">$10K+</option>
+                                <option value="100000">$100K+</option>
+                                <option value="1000000">$1M+</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Min Liquidity</label>
+                            <select id="min-liquidity-select" class="filter-select">
+                                <option value="0">Any</option>
+                                <option value="1000">$1K+</option>
+                                <option value="10000">$10K+</option>
+                                <option value="50000">$50K+</option>
+                            </select>
+                        </div>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="show-closed" class="toggle-input">
+                            <span>Show Closed</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Markets Grid -->
+                <div id="markets-grid" class="markets-grid">
+                    <div class="loading-spinner">Loading markets...</div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination">
+                    <button id="prev-page" class="btn btn-ghost" disabled>Previous</button>
+                    <span id="page-info" class="page-info">Page 1</span>
+                    <button id="next-page" class="btn btn-ghost">Next</button>
+                </div>
+            </div>
+
+            <!-- Event Detail / Trading View -->
+            <div id="event-view" class="view">
+                <button id="back-to-markets" class="btn btn-ghost back-btn">
+                    ← Back to Markets
+                </button>
+                <div id="event-detail" class="event-detail"></div>
+            </div>
+
+            <!-- Portfolio View -->
+            <div id="portfolio-view" class="view">
+                <div class="portfolio-container">
+                    <h2>Your Portfolio</h2>
+                    <div id="wallet-setup" class="wallet-setup">
+                        <div class="setup-card">
+                            <h3>Get Started</h3>
+                            <p>Connect your wallet and set up gasless trading.</p>
+                            <div class="setup-steps">
+                                <div class="setup-step" id="step-connect">
+                                    <span class="step-num">1</span>
+                                    <span>Connect wallet with Privy</span>
+                                    <span class="step-status" id="step-connect-status">○</span>
+                                </div>
+                                <div class="setup-step" id="step-deploy">
+                                    <span class="step-num">2</span>
+                                    <span>Deploy Safe wallet (gasless)</span>
+                                    <span class="step-status" id="step-deploy-status">○</span>
+                                </div>
+                                <div class="setup-step" id="step-approve">
+                                    <span class="step-num">3</span>
+                                    <span>Approve tokens for trading</span>
+                                    <span class="step-status" id="step-approve-status">○</span>
+                                </div>
+                            </div>
+                            <button id="setup-action-btn" class="btn btn-primary" disabled>Connect Wallet First</button>
+                        </div>
+                    </div>
+                    <div id="positions-section" class="hidden">
+                        <h3>Open Orders</h3>
+                        <div id="open-orders" class="orders-list">
+                            <p class="empty-state">No open orders</p>
+                        </div>
+                        <h3>Trade History</h3>
+                        <div id="trade-history" class="orders-list">
+                            <p class="empty-state">No trades yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Trading Modal -->
+        <div id="trade-modal" class="modal hidden">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="trade-modal-title">Place Order</h3>
+                    <button class="modal-close" id="close-trade-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="trade-market-info">
+                        <p id="trade-market-question" class="trade-question"></p>
+                        <div class="trade-prices">
+                            <div class="price-box yes">
+                                <span class="price-label">Yes</span>
+                                <span id="trade-yes-price" class="price-value">--</span>
+                            </div>
+                            <div class="price-box no">
+                                <span class="price-label">No</span>
+                                <span id="trade-no-price" class="price-value">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="trade-form">
+                        <div class="trade-side-toggle">
+                            <button class="side-btn active" data-side="BUY" data-outcome="yes">Buy Yes</button>
+                            <button class="side-btn" data-side="BUY" data-outcome="no">Buy No</button>
+                            <button class="side-btn" data-side="SELL" data-outcome="yes">Sell Yes</button>
+                            <button class="side-btn" data-side="SELL" data-outcome="no">Sell No</button>
+                        </div>
+
+                        <div class="trade-type-toggle">
+                            <button class="type-btn active" data-type="market">Market</button>
+                            <button class="type-btn" data-type="limit">Limit</button>
+                        </div>
+
+                        <div id="limit-price-group" class="form-group hidden">
+                            <label>Price (per share)</label>
+                            <div class="input-wrapper">
+                                <span class="input-prefix">$</span>
+                                <input type="number" id="limit-price" min="0.01" max="0.99" step="0.01" placeholder="0.50">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label id="amount-label">Amount (USD)</label>
+                            <div class="input-wrapper">
+                                <span class="input-prefix">$</span>
+                                <input type="number" id="trade-amount" min="0.10" step="0.10" placeholder="10.00">
+                            </div>
+                        </div>
+
+                        <div class="trade-summary">
+                            <div class="summary-row">
+                                <span>Estimated shares</span>
+                                <span id="est-shares">--</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Max payout</span>
+                                <span id="max-payout">--</span>
+                            </div>
+                            <div class="summary-row attribution">
+                                <span>Gasless via Polymarket Relayer</span>
+                                <span class="checkmark">✓</span>
+                            </div>
+                        </div>
+
+                        <button id="place-order-btn" class="btn btn-primary btn-lg" disabled>
+                            Connect Wallet to Trade
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast notifications -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Privy SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@privy-io/js-sdk-core@0.44.2/dist/umd/index.js"></script>
+
+    <!-- App Scripts -->
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/privy.js"></script>
+    <script src="/js/markets.js"></script>
+    <script src="/js/trading.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

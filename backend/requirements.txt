@@ -1,0 +1,8 @@
+flask==3.1.0
+flask-cors==5.0.1
+python-dotenv==1.1.0
+requests==2.32.3
+py-clob-client==0.18.2
+py-builder-relayer-client==0.0.1
+gunicorn==23.0.0
+web3==7.6.0
